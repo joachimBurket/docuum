@@ -36,26 +36,17 @@ struct Event {
     #[serde(rename = "Type")]
     r#type: String,
 
-    #[serde(rename = "Action")]
+    #[serde(rename = "Status")]
     action: String,
 
-    #[serde(rename = "Actor")]
-    actor: EventActor,
+    #[serde(rename = "Name")]
+    name: Option<String>,
 
-    id: String,
-}
-
-// A Docker event actor
-#[derive(Deserialize, Serialize, Debug)]
-struct EventActor {
-    #[serde(rename = "Attributes")]
-    attributes: EventActorAttributes,
-}
-
-// Docker event actor attributes
-#[derive(Deserialize, Serialize, Debug)]
-struct EventActorAttributes {
+    #[serde(rename = "Image")]
     image: Option<String>,
+
+    #[serde(rename = "ID")]
+    id: Option<String>,
 }
 
 // A line of output from `docker system df --format '{{json .}}'`
@@ -65,7 +56,7 @@ struct SpaceRecord {
     r#type: String,
 
     #[serde(rename = "Size")]
-    size: String,
+    size: u128,
 }
 
 // Each image may be associated with multiple of these repository-tag pairs. Docker will always
@@ -314,7 +305,7 @@ fn image_ids_in_use() -> io::Result<HashSet<String>> {
 fn docker_root_dir() -> io::Result<PathBuf> {
     // Query Docker for it.
     let output = Command::new("docker")
-        .args(&["info", "--format", "{{.DockerRootDir}}"])
+        .args(&["info", "--format", "{{.DockerRootDir}}"])      // TODO: podman root directory is in ".store.graphRoot"
         .stderr(Stdio::inherit())
         .output()?;
 
@@ -386,16 +377,7 @@ fn space_usage() -> io::Result<Byte> {
                 if let Ok(space_record) = serde_json::from_str::<SpaceRecord>(line) {
                     // Return early if we found the record we're looking for.
                     if space_record.r#type == "Images" {
-                        return Byte::from_str(&space_record.size).map_err(|_| {
-                            io::Error::new(
-                                io::ErrorKind::Other,
-                                format!(
-                                    "Unable to parse {} from {}.",
-                                    space_record.size.code_str(),
-                                    "docker system df".code_str(),
-                                ),
-                            )
-                        });
+                        return Ok(Byte::from_bytes(space_record.size));
                     }
                 }
             }
@@ -417,7 +399,7 @@ fn delete_image(image: &str) -> io::Result<()> {
 
     // Tell Docker to delete the image.
     let mut child = Command::new("docker")
-        .args(&["image", "rm", "--force", "--no-prune", image])
+        .args(&["image", "rm", "--force", image])       // TOOD: re-add the "--no-prune" argument when supported (normally in podman 4.3)
         .spawn()?;
 
     // Ensure the command succeeded.
@@ -799,9 +781,9 @@ pub fn run(settings: &Settings, state: &mut State, first_run: &mut bool) -> io::
 
         // Get the ID of the image.
         let image_id = image_id(&if event.r#type == "container"
-            && (event.action == "create" || event.action == "destroy")
+            && (event.action == "init" || event.action == "remove")
         {
-            if let Some(image_name) = event.actor.attributes.image {
+            if let Some(image_name) = event.image {
                 image_name
             } else {
                 trace!("Invalid Docker event.");
@@ -809,13 +791,24 @@ pub fn run(settings: &Settings, state: &mut State, first_run: &mut bool) -> io::
             }
         } else if event.r#type == "image"
             && (event.action == "import"
-                || event.action == "load"
                 || event.action == "pull"
                 || event.action == "push"
                 || event.action == "save"
+                || event.action == "build"
                 || event.action == "tag")
         {
-            event.id
+            if let Some(image_id) = event.id {
+                image_id
+            }
+            // If event has no image ID, use the image name instead
+            else {
+                if let Some(image_name) = event.name {
+                    image_name
+                } else {
+                    trace!("Invalid Docker event.");
+                    continue;
+                }
+            }
         } else {
             trace!("Skipping due to irrelevance.");
             continue;
