@@ -305,11 +305,7 @@ fn image_ids_in_use() -> io::Result<HashSet<String>> {
 fn docker_root_dir() -> io::Result<PathBuf> {
     // Query Docker for it.
     let output = Command::new("docker")
-<<<<<<< HEAD
         .args(&["info", "--format", "{{.DockerRootDir}}"])      // TODO: podman root directory is in ".store.graphRoot"
-=======
-        .args(["info", "--format", "{{.DockerRootDir}}"])
->>>>>>> main
         .stderr(Stdio::inherit())
         .output()?;
 
@@ -403,11 +399,7 @@ fn delete_image(image: &str) -> io::Result<()> {
 
     // Tell Docker to delete the image.
     let mut child = Command::new("docker")
-<<<<<<< HEAD
         .args(&["image", "rm", "--force", image])       // TOOD: re-add the "--no-prune" argument when supported (normally in podman 4.3)
-=======
-        .args(["image", "rm", "--force", "--no-prune", image])
->>>>>>> main
         .spawn()?;
 
     // Ensure the command succeeded.
