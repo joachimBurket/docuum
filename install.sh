@@ -14,20 +14,28 @@
   DESTINATION="${PREFIX:-/usr/local/bin}/docuum"
 
   # Which version to download
-  RELEASE="v${VERSION:-0.21.1}"
+  RELEASE="v${VERSION:-0.23.1}"
 
   # Determine which binary to download.
   FILENAME=''
   if uname -a | grep -qi 'x86_64.*GNU/Linux'; then
     echo 'x86-64 GNU Linux detected.'
     FILENAME=docuum-x86_64-unknown-linux-gnu
-  elif uname -a | grep -qi 'x86_64 Linux'; then
+  elif uname -a | grep -qi 'x86_64.*Linux'; then
     echo 'x86-64 non-GNU Linux detected.'
     FILENAME=docuum-x86_64-unknown-linux-musl
-  fi
-  if uname -a | grep -qi 'Darwin.*x86_64'; then
+  elif uname -a | grep -qi 'aarch64.*GNU/Linux'; then
+    echo 'AArch64 GNU Linux detected.'
+    FILENAME=docuum-aarch64-unknown-linux-gnu
+  elif uname -a | grep -qi 'aarch64.*Linux'; then
+    echo 'AArch64 non-GNU Linux detected.'
+    FILENAME=docuum-aarch64-unknown-linux-musl
+  elif uname -a | grep -qi 'Darwin.*x86_64'; then
     echo 'x86-64 macOS detected.'
     FILENAME=docuum-x86_64-apple-darwin
+  elif uname -a | grep -qi 'Darwin.*arm64'; then
+    echo 'AArch64 macOS detected.'
+    FILENAME=docuum-aarch64-apple-darwin
   fi
 
   # Find a temporary location for the binary.

@@ -8,9 +8,9 @@ jobs:
     name: Build for Linux
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - if: ${{ github.event_name == 'push' }}
-      uses: azure/docker-login@v1
+      uses: docker/login-action@v3
       with:
         username: stephanmisc
         password: ${{ secrets.DOCKER_PASSWORD }}
@@ -25,7 +25,7 @@ jobs:
 
         # The artifact name will contain the target triple, so the file name doesn't need to.
         mv artifacts/docuum-x86_64-unknown-linux-gnu artifacts/docuum
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: x86_64-unknown-linux-gnu
         path: artifacts/docuum
@@ -36,61 +36,123 @@ jobs:
 
         # The artifact name will contain the target triple, so the file name doesn't need to.
         mv artifacts/docuum-x86_64-unknown-linux-musl artifacts/docuum
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: x86_64-unknown-linux-musl
+        path: artifacts/docuum
+        if-no-files-found: error
+    - run: |
+        # Make Bash not silently ignore errors.
+        set -euo pipefail
+
+        # The artifact name will contain the target triple, so the file name doesn't need to.
+        mv artifacts/docuum-aarch64-unknown-linux-gnu artifacts/docuum
+    - uses: actions/upload-artifact@v3
+      with:
+        name: aarch64-unknown-linux-gnu
+        path: artifacts/docuum
+        if-no-files-found: error
+    - run: |
+        # Make Bash not silently ignore errors.
+        set -euo pipefail
+
+        # The artifact name will contain the target triple, so the file name doesn't need to.
+        mv artifacts/docuum-aarch64-unknown-linux-musl artifacts/docuum
+    - uses: actions/upload-artifact@v3
+      with:
+        name: aarch64-unknown-linux-musl
         path: artifacts/docuum
         if-no-files-found: error
   ci-windows:
     name: Build for Windows
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v2
+    - run: |
+        # Make Bash not silently ignore errors.
+        set -euo pipefail
+
+        # The unit tests do not expect the files in `test_data` to have carriage returns added.
+        git config --global core.autocrlf false
+        git config --global core.eol lf
+    - uses: actions/checkout@v3
     - run: |
         # Make Bash not silently ignore errors.
         set -euo pipefail
 
         # Install the appropriate version of Rust.
-        rustup toolchain install 1.65.0 # [ref:rust_1.65.0]
-        rustup default 1.65.0 # [ref:rust_1.65.0]
+        rustup toolchain install 1.74.0 # [ref:rust_1.74.0]
+        rustup default 1.74.0 # [ref:rust_1.74.0]
 
-        # Build and test.
+        # Add the targets.
+        rustup target add x86_64-pc-windows-msvc
+        rustup target add aarch64-pc-windows-msvc
+
+        # Build and test for x86_64-pc-windows-msvc.
         RUSTFLAGS='--codegen target-feature=+crt-static' cargo build \
           --locked \
           --release \
           --target x86_64-pc-windows-msvc
         NO_COLOR=true cargo test --locked # [ref:colorless_tests]
-    - uses: actions/upload-artifact@v2
+
+        # Build and test for aarch64-pc-windows-msvc.
+        RUSTFLAGS='--codegen target-feature=+crt-static' cargo build \
+          --locked \
+          --release \
+          --target aarch64-pc-windows-msvc
+        NO_COLOR=true cargo test --locked # [ref:colorless_tests]
+    - uses: actions/upload-artifact@v3
       with:
         name: x86_64-pc-windows-msvc
         path: target/x86_64-pc-windows-msvc/release/docuum.exe
+        if-no-files-found: error
+    - uses: actions/upload-artifact@v3
+      with:
+        name: aarch64-pc-windows-msvc
+        path: target/aarch64-pc-windows-msvc/release/docuum.exe
         if-no-files-found: error
   ci-macos:
     name: Build for macOS
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - run: |
         # Make Bash not silently ignore errors.
         set -euo pipefail
 
         # Install the appropriate version of Rust.
-        rustup toolchain install 1.65.0 # [ref:rust_1.65.0]
-        rustup default 1.65.0 # [ref:rust_1.65.0]
+        rustup toolchain install 1.74.0 # [ref:rust_1.74.0]
+        rustup default 1.74.0 # [ref:rust_1.74.0]
 
-        # Build and test.
-        cargo build --locked --release --target x86_64-apple-darwin
+        # Add the targets.
+        rustup target add x86_64-apple-darwin
+        rustup target add aarch64-apple-darwin
+
+        # Build and test for x86_64-apple-darwin.
+        SDKROOT=$(xcrun --show-sdk-path) \
+          MACOSX_DEPLOYMENT_TARGET=$(xcrun --show-sdk-version) \
+            cargo build --locked --release --target x86_64-apple-darwin
         NO_COLOR=true cargo test --locked # [ref:colorless_tests]
-    - uses: actions/upload-artifact@v2
+
+        # Build and test for aarch64-apple-darwin.
+        SDKROOT=$(xcrun --show-sdk-path) \
+          MACOSX_DEPLOYMENT_TARGET=$(xcrun --show-sdk-version) \
+            cargo build --locked --release --target aarch64-apple-darwin
+        NO_COLOR=true cargo test --locked # [ref:colorless_tests]
+    - uses: actions/upload-artifact@v3
       with:
         name: x86_64-apple-darwin
         path: target/x86_64-apple-darwin/release/docuum
+        if-no-files-found: error
+    - uses: actions/upload-artifact@v3
+      with:
+        name: aarch64-apple-darwin
+        path: target/aarch64-apple-darwin/release/docuum
         if-no-files-found: error
   install-macos:
     name: Install on macOS
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - run: |
         # Make Bash not silently ignore errors.
         set -euo pipefail
@@ -104,7 +166,7 @@ jobs:
     name: Install on Ubuntu
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - run: |
         # Make Bash not silently ignore errors.
         set -euo pipefail
@@ -120,12 +182,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ci-linux, ci-macos, ci-windows, install-macos, install-ubuntu]
     steps:
-    - uses: actions/checkout@v2
-    - uses: azure/docker-login@v1
+    - uses: actions/checkout@v3
+    - uses: docker/setup-qemu-action@v3 # For building multi-platform images
+    - uses: docker/setup-buildx-action@v3 # For building multi-platform images
+    - uses: docker/login-action@v3
       with:
         username: stephanmisc
         password: ${{ secrets.DOCKER_PASSWORD }}
-    - uses: actions/download-artifact@v2
+    - uses: actions/download-artifact@v3
       with:
         path: artifacts/
     - env:
@@ -135,16 +199,17 @@ jobs:
         set -euo pipefail
 
         # Install the appropriate version of Rust.
-        rustup toolchain install 1.65.0 # [ref:rust_1.65.0]
-        rustup default 1.65.0 # [ref:rust_1.65.0]
+        rustup toolchain install 1.74.0 # [ref:rust_1.74.0]
+        rustup default 1.74.0 # [ref:rust_1.74.0]
 
         # Fetch the program version.
         VERSION="$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
 
-        # If the release already exists, exit early.
-        if hub release show "v$VERSION" &> /dev/null; then
+        # Determine if the release already exists.
+        if gh release view "v$VERSION" &> /dev/null; then
           echo "Release v$VERSION already exists."
-          exit
+        else
+          echo "VERSION_TO_PUBLISH=$VERSION" >> "$GITHUB_ENV"
         fi
 
         # Give the artifacts unique names.
@@ -155,43 +220,65 @@ jobs:
           artifacts/x86_64-unknown-linux-musl/docuum \
           artifacts/docuum-x86_64-unknown-linux-musl
         mv \
+          artifacts/aarch64-unknown-linux-gnu/docuum \
+          artifacts/docuum-aarch64-unknown-linux-gnu
+        mv \
+          artifacts/aarch64-unknown-linux-musl/docuum \
+          artifacts/docuum-aarch64-unknown-linux-musl
+        mv \
           artifacts/x86_64-apple-darwin/docuum \
           artifacts/docuum-x86_64-apple-darwin
         mv \
+          artifacts/aarch64-apple-darwin/docuum \
+          artifacts/docuum-aarch64-apple-darwin
+        mv \
           artifacts/x86_64-pc-windows-msvc/docuum.exe \
           artifacts/docuum-x86_64-pc-windows-msvc.exe
+        mv \
+          artifacts/aarch64-pc-windows-msvc/docuum.exe \
+          artifacts/docuum-aarch64-pc-windows-msvc.exe
 
-        # Make the x86_64-unknown-linux-musl artifact executable again before building the Docker
-        # image with it below. See https://github.com/actions/upload-artifact/issues/38.
+        # For the Docker image, make the relevant artifacts executable again. See
+        # https://github.com/actions/upload-artifact/issues/38.
         chmod a+x artifacts/docuum-x86_64-unknown-linux-musl
+        chmod a+x artifacts/docuum-aarch64-unknown-linux-musl
+    - if: ${{ env.VERSION_TO_PUBLISH != null }}
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        platforms: linux/amd64,linux/arm64
+        tags: stephanmisc/docuum,stephanmisc/docuum:${{ env.VERSION_TO_PUBLISH }}
+    - if: ${{ env.VERSION_TO_PUBLISH != null }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Make Bash not silently ignore errors.
+        set -euo pipefail
 
-        # Build the Docker image.
-        docker build --tag stephanmisc/docuum --tag "stephanmisc/docuum:$VERSION" .
-
-        # Run the Docker image to validate it.
+        # Run the Docker image to validate it. The image has already been published (since the
+        # `docker/build-push-action@v5` action unfortunately doesn't support importing multi-
+        # platform images into a local Docker installation), but we still validate it now anyway.
         docker run \
           --init \
           --rm \
           --tty \
           --name docuum \
-          --volume /var/run/docker.sock:/var/run/docker.sock \
-          --volume docuum:/root \
-          stephanmisc/docuum --help
-
-        # Push the Docker image.
-        docker push stephanmisc/docuum
-        docker push "stephanmisc/docuum:$VERSION"
+          --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+          --mount type=volume,source=docuum,target=/root \
+          "stephanmisc/docuum:$VERSION_TO_PUBLISH" --help
 
         # Create the release.
-        hub release create \
-          --commitish '${{ github.sha }}' \
-          --message "v$VERSION" \
-          --attach 'artifacts/docuum-x86_64-unknown-linux-gnu' \
-          --attach 'artifacts/docuum-x86_64-unknown-linux-musl' \
-          --attach 'artifacts/docuum-x86_64-apple-darwin' \
-          --attach 'artifacts/docuum-x86_64-pc-windows-msvc.exe' \
-          "v$VERSION"
-        echo "Created release v$VERSION."
+        gh release create "v$VERSION" --title "v$VERSION" --notes '' \
+          'artifacts/docuum-x86_64-unknown-linux-gnu' \
+          'artifacts/docuum-x86_64-unknown-linux-musl' \
+          'artifacts/docuum-aarch64-unknown-linux-gnu' \
+          'artifacts/docuum-aarch64-unknown-linux-musl' \
+          'artifacts/docuum-x86_64-apple-darwin' \
+          'artifacts/docuum-aarch64-apple-darwin' \
+          'artifacts/docuum-x86_64-pc-windows-msvc.exe' \
+          'artifacts/docuum-aarch64-pc-windows-msvc.exe'
+        echo "Created release v$VERSION_TO_PUBLISH."
     - uses: stepchowfun/toast/.github/actions/toast@main
       with:
         tasks: publish

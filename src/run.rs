@@ -149,7 +149,7 @@ fn parent_id(state: &State, image_id: &str) -> io::Result<Option<String>> {
 }
 
 // Query Docker for all the images.
-fn list_image_records(state: &mut State) -> io::Result<HashMap<String, ImageRecord>> {
+fn list_image_records(state: &State) -> io::Result<HashMap<String, ImageRecord>> {
     // Get the IDs and creation timestamps of all the images.
     let output = Command::new("docker")
         .args([
@@ -414,7 +414,8 @@ fn delete_image(image: &str) -> io::Result<()> {
 }
 
 // Update the timestamp for an image.
-fn touch_image(state: &mut State, image_id: &str, verbose: bool) -> io::Result<()> {
+// Returns a boolean indicating if a new entry was created for the image.
+fn touch_image(state: &mut State, image_id: &str, verbose: bool) -> io::Result<bool> {
     if verbose {
         debug!(
             "Updating last-used timestamp for image {}\u{2026}",
@@ -431,18 +432,20 @@ fn touch_image(state: &mut State, image_id: &str, verbose: bool) -> io::Result<(
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => {
             // Store the image metadata in the state.
-            state.images.insert(
-                image_id.to_owned(),
-                state::Image {
-                    parent_id: parent_id(state, image_id)?,
-                    last_used_since_epoch: duration,
-                },
-            );
-            Ok(())
+            Ok(state
+                .images
+                .insert(
+                    image_id.to_owned(),
+                    state::Image {
+                        parent_id: parent_id(state, image_id)?,
+                        last_used_since_epoch: duration,
+                    },
+                )
+                .is_none())
         }
         Err(error) => Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Unable to compute the current timestamp: {:?}.", error),
+            format!("Unable to compute the current timestamp: {error:?}."),
         )),
     }
 }
@@ -483,7 +486,7 @@ fn construct_polyforest(
         Ok(duration) => Ok(duration),
         Err(error) => Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Unable to compute the current timestamp: {:?}.", error),
+            format!("Unable to compute the current timestamp: {error:?}."),
         )),
     }?;
 
@@ -607,6 +610,7 @@ fn vacuum(
     first_run: bool,
     threshold: Byte,
     keep: &Option<RegexSet>,
+    deletion_chunk_size: usize,
 ) -> io::Result<()> {
     // Find all images.
     let image_records = list_image_records(state)?;
@@ -660,14 +664,16 @@ fn vacuum(
         );
 
         // Start deleting images, beginning with the least recently used.
-        for (image_id, _) in sorted_image_nodes {
-            // Delete the image.
-            if let Err(error) = delete_image(image_id) {
-                // The deletion failed. Just log the error and proceed.
-                error!("{}", error);
-            } else {
-                // Forget about the deleted image.
-                deleted_image_ids.insert(image_id.clone());
+        for image_ids in sorted_image_nodes.chunks_mut(deletion_chunk_size) {
+            for (image_id, _) in image_ids {
+                // Delete the image.
+                if let Err(error) = delete_image(image_id) {
+                    // The deletion failed. Just log the error and proceed.
+                    error!("{}", error);
+                } else {
+                    // Forget about the deleted image.
+                    deleted_image_ids.insert(image_id.clone());
+                }
             }
 
             // Break if we're within the threshold.
@@ -725,11 +731,17 @@ pub fn run(settings: &Settings, state: &mut State, first_run: &mut bool) -> io::
     };
 
     // NOTE: Don't change this log line, since the test in the Homebrew formula
-    // (https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/docuum.rb) relies on it.
+    // (https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/d/docuum.rb) relies on it.
     info!("Performing an initial vacuum on startup\u{2026}");
 
     // Run the main vacuum logic.
-    vacuum(state, *first_run, threshold, &settings.keep)?;
+    vacuum(
+        state,
+        *first_run,
+        threshold,
+        &settings.keep,
+        settings.deletion_chunk_size,
+    )?;
     state::save(state)?;
     *first_run = false;
 
@@ -766,7 +778,7 @@ pub fn run(settings: &Settings, state: &mut State, first_run: &mut bool) -> io::
         // Parse the line as an event.
         let event = match serde_json::from_str::<Event>(&line) {
             Ok(event) => {
-                trace!("Parsed as: {}", format!("{:?}", event).code_str());
+                trace!("Parsed as: {}", format!("{event:?}").code_str());
                 event
             }
             Err(error) => {
@@ -814,10 +826,16 @@ pub fn run(settings: &Settings, state: &mut State, first_run: &mut bool) -> io::
         debug!("Waking up\u{2026}");
 
         // Update the timestamp for this image.
-        touch_image(state, &image_id, true)?;
-
-        // Run the main vacuum logic.
-        vacuum(state, *first_run, threshold, &settings.keep)?;
+        if touch_image(state, &image_id, true)? {
+            // Run the main vacuum logic only if a new image came in.
+            vacuum(
+                state,
+                *first_run,
+                threshold,
+                &settings.keep,
+                settings.deletion_chunk_size,
+            )?;
+        }
 
         // Persist the state.
         state::save(state)?;

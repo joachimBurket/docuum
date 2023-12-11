@@ -17,11 +17,11 @@ command_prefix: |
   cargo-offline () { cargo --frozen --offline "$@"; }
 
   # Use this wrapper for formatting code or checking that code is formatted. We use a nightly Rust
-  # version for the `trailing_comma` formatting option [tag:rust_fmt_nightly_2022-11-03]. The
+  # version for the `trailing_comma` formatting option [tag:rust_fmt_nightly_2023-11-17]. The
   # nightly version was chosen as the latest available release with all components present
   # according to this page:
   #   https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu.html
-  cargo-fmt () { cargo +nightly-2022-11-03 --frozen --offline fmt --all -- "$@"; }
+  cargo-fmt () { cargo +nightly-2023-11-17 --frozen --offline fmt --all -- "$@"; }
 tasks:
   install_packages:
     description: Install system packages.
@@ -29,23 +29,37 @@ tasks:
     command: |
       # Install the following packages:
       #
-      # - build-essential - Used for linking the binary
-      # - curl            - Used for installing Tagref and Rust
-      # - lsb-release     - Used below to determine the Ubuntu release codename
-      # - ripgrep         - Used for various linting tasks
-      # - shellcheck      - Used for linting shell scripts
+      # - ca-certificates       - Used for fetching Docker's GPG key
+      # - curl                  - Used for installing Docker, Tagref, and Rust
+      # - gcc-aarch64-linux-gnu - Used for linking the binary for AArch64
+      # - gcc-x86-64-linux-gnu  - Used for linking the binary for x86-64
+      # - gnupg                 - Used to install Docker's GPG key
+      # - lsb-release           - Used below to determine the Ubuntu release codename
+      # - ripgrep               - Used for various linting tasks
+      # - shellcheck            - Used for linting shell scripts
       apt-get update
-      apt-get install --yes build-essential curl lsb-release ripgrep shellcheck
+      apt-get install --yes \
+        ca-certificates \
+        curl \
+        gcc-aarch64-linux-gnu \
+        gcc-x86-64-linux-gnu \
+        gnupg \
+        lsb-release \
+        ripgrep \
+        shellcheck
 
       # Download Docker's official GPG key.
+      install -m 0755 -d /etc/apt/keyrings
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-        gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+        gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      chmod a+r /etc/apt/keyrings/docker.gpg
 
       # Set up the Docker repository.
       echo \
-        "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] "\
-        "https://download.docker.com/linux/ubuntu "\
-        "$(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+        "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] \
+          https://download.docker.com/linux/ubuntu \
+          "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
 
       # Install the Docker CLI.
       apt-get update
@@ -73,18 +87,18 @@ tasks:
       - install_packages
       - create_user
     command: |
-      # Install stable Rust [tag:rust_1.65.0].
+      # Install stable Rust [tag:rust_1.74.0].
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
         -y \
-        --default-toolchain 1.65.0 \
+        --default-toolchain 1.74.0 \
         --profile minimal \
         --component clippy
 
       # Add Rust tools to `$PATH`.
       . "$HOME/.cargo/env"
 
-      # Install nightly Rust [ref:rust_fmt_nightly_2022-11-03].
-      rustup toolchain install nightly-2022-11-03 --profile minimal --component rustfmt
+      # Install nightly Rust [ref:rust_fmt_nightly_2023-11-17].
+      rustup toolchain install nightly-2023-11-17 --profile minimal --component rustfmt
 
   install_tools:
     description: Install the tools needed to build and validate the program.
@@ -213,13 +227,23 @@ tasks:
     output_paths:
       - artifacts
     command: |
-      # Add the targets. It's likely that this script is currently running in one of them.
+      # Add the targets.
       rustup target add x86_64-unknown-linux-gnu
       rustup target add x86_64-unknown-linux-musl
+      rustup target add aarch64-unknown-linux-gnu
+      rustup target add aarch64-unknown-linux-musl
 
-      # Build the project for both Linux targets with Cargo.
+      # Set the linkers.
+      export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc
+      export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=x86_64-linux-gnu-gcc
+      export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+      export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
+
+      # Build the project with Cargo for each Linux target.
       cargo-online build --release --target x86_64-unknown-linux-gnu
       cargo-online build --release --target x86_64-unknown-linux-musl
+      cargo-online build --release --target aarch64-unknown-linux-gnu
+      cargo-online build --release --target aarch64-unknown-linux-musl
 
       # Move the binaries to a more conveniennt location for exporting.
       mkdir artifacts
@@ -229,13 +253,19 @@ tasks:
       cp \
         target/x86_64-unknown-linux-musl/release/docuum \
         artifacts/docuum-x86_64-unknown-linux-musl
+      cp \
+        target/aarch64-unknown-linux-gnu/release/docuum \
+        artifacts/docuum-aarch64-unknown-linux-gnu
+      cp \
+        target/aarch64-unknown-linux-musl/release/docuum \
+        artifacts/docuum-aarch64-unknown-linux-musl
 
   validate_release:
     description: Validate the release.
     dependencies:
       - release
     input_paths:
-      - integration_test.sh
+      - integration-test.sh
     cache: false
     mount_paths:
       - /var/run/docker.sock
@@ -258,8 +288,8 @@ tasks:
         docker:dind
       docker exec dind apk add bash
       docker cp "artifacts/docuum-x86_64-unknown-linux-musl" dind:/
-      docker cp integration_test.sh dind:/
-      docker exec dind ./integration_test.sh
+      docker cp integration-test.sh dind:/
+      docker exec dind ./integration-test.sh
 
   publish:
     description: Publish the crate to crates.io.
@@ -281,4 +311,4 @@ tasks:
       fi
 
       # Publish to crates.io.
-      # cargo-online publish --token "$CRATES_IO_TOKEN"
+      cargo-online publish --token "$CRATES_IO_TOKEN"

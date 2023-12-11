@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.1] - 2023-10-02
+
+### Added
+- The Docuum Docker image now supports AArch64.
+
+## [0.23.0] - 2023-08-17
+
+### Changed
+- Docuum now only runs its vacuuming logic when it learns about a new image for the first time.
+
+## [0.22.4] - 2023-06-18
+
+### Added
+- Docuum supports a new platform: Windows on AArch64.
+
+## [0.22.3] - 2023-06-02
+
+### Added
+- Docuum supports a new platform: musl Linux on AArch64.
+
+## [0.22.2] - 2023-05-23
+
+### Added
+- Docuum supports a new platform: GNU Linux on AArch64.
+
+## [0.22.1] - 2023-05-13
+
+### Added
+- Docuum supports a new platform: macOS on Apple silicon.
+
+## [0.22.0] - 2023-04-09
+
+### Added
+- Added `--deletion-chunk-size`, thanks to Kulek Alexandr.
+
 ## [0.21.1] - 2022-04-12
 
 ### Fixed

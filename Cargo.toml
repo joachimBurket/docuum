@@ -1,6 +1,6 @@
 [package]
 name = "docuum"
-version = "0.21.1"
+version = "0.23.1"
 authors = ["Stephan Boyer <stephan@stephanboyer.com>"]
 edition = "2021"
 description = "LRU eviction of Docker images."
@@ -9,6 +9,11 @@ documentation = "https://github.com/stepchowfun/docuum"
 homepage = "https://github.com/stepchowfun/docuum"
 repository = "https://github.com/stepchowfun/docuum"
 readme = "README.md"
+
+[lints]
+clippy.all = "deny"
+clippy.pedantic = "deny"
+rust.warnings = "deny"
 
 [dependencies]
 atty = "0.2"

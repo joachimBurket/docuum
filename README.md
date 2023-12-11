@@ -4,11 +4,11 @@
 
 *Docuum* performs least recently used (LRU) eviction of Docker images to keep the disk usage below a given threshold.
 
-Docker's built-in `docker image prune --all --filter until=…` command serves a similar purpose. However, the built-in solution isn't ideal since it uses the image creation time, rather than the last usage time, to determine which images to remove. That means it can delete frequently used images, which may be expensive to rebuild.
+Docker's built-in `docker image prune --all --filter until=…` command serves a similar purpose. However, the built-in solution isn't ideal since it uses the image creation time, rather than the last usage time, to determine which images to remove. That means it can delete frequently used images, which may be expensive to rebuild or time-consuming to pull.
 
 Docuum is ideal for use cases such as continuous integration (CI) workers, developer workstations, or any other environment in which Docker images accumulate on disk over time. Docuum works well with tools like [Toast](https://github.com/stepchowfun/toast) and [Docker Compose](https://docs.docker.com/compose/).
 
-Docuum is used by Airbnb on its fleet of 1.5k+ CI workers.
+Docuum is used by Netflix (on its production Kubernetes nodes) and Airbnb (on its CI fleet of 1.5k+ CI workers).
 
 ## How it works
 
@@ -41,6 +41,9 @@ USAGE:
     docuum
 
 OPTIONS:
+    -d, --deletion-chunk-size <DELETION CHUNK SIZE>
+            Removes specified quantity of images at a time (default: 1)
+
     -h, --help
             Prints help information
 
@@ -67,9 +70,9 @@ Installation consists of two steps:
 
 ### Installing the binary
 
-#### Installation on macOS or Linux (x86-64)
+#### Installation on macOS or Linux (AArch64 or x86-64)
 
-If you're running macOS or Linux on an x86-64 CPU, you can install Docuum with this command:
+If you're running macOS or Linux (AArch64 or x86-64), you can install Docuum with this command:
 
 ```sh
 curl https://raw.githubusercontent.com/stepchowfun/docuum/main/install.sh -LSfs | sh
@@ -90,9 +93,9 @@ curl https://raw.githubusercontent.com/stepchowfun/docuum/main/install.sh -LSfs 
 
 If you prefer not to use this installation method, you can download the binary from the [releases page](https://github.com/stepchowfun/docuum/releases), make it executable (e.g., with `chmod`), and place it in some directory in your [`PATH`](https://en.wikipedia.org/wiki/PATH_\(variable\)) (e.g., `/usr/local/bin`).
 
-#### Installation on Windows (x86-64)
+#### Installation on Windows (AArch64 or x86-64)
 
-If you're running Windows on an x86-64 CPU, download the latest binary from the [releases page](https://github.com/stepchowfun/docuum/releases) and rename it to `docuum` (or `docuum.exe` if you have file extensions visible). Create a directory called `Docuum` in your `%PROGRAMFILES%` directory (e.g., `C:\Program Files\Docuum`), and place the renamed binary in there. Then, in the "Advanced" tab of the "System Properties" section of Control Panel, click on "Environment Variables..." and add the full path to the new `Docuum` directory to the `PATH` variable under "System variables". Note that the `Program Files` directory might have a different name if Windows is configured for a language other than English.
+If you're running Windows (AArch64 or x86-64), download the latest binary from the [releases page](https://github.com/stepchowfun/docuum/releases) and rename it to `docuum` (or `docuum.exe` if you have file extensions visible). Create a directory called `Docuum` in your `%PROGRAMFILES%` directory (e.g., `C:\Program Files\Docuum`), and place the renamed binary in there. Then, in the "Advanced" tab of the "System Properties" section of Control Panel, click on "Environment Variables..." and add the full path to the new `Docuum` directory to the `PATH` variable under "System variables". Note that the `Program Files` directory might have a different name if Windows is configured for a language other than English.
 
 To update to an existing installation, simply replace the existing binary.
 
@@ -118,7 +121,7 @@ You can run that command with `--force` to update an existing installation.
 
 #### Running Docuum in a Docker container on a host capable of running Linux containers
 
-If you prefer not to install Docuum on your system and you're running macOS or Linux on an x86-64 CPU, you can run it in a container:
+If you prefer not to install Docuum on your system and you're running macOS or Linux (AArch64 or x86-64), you can run it in a container:
 
 ```sh
 docker run \
@@ -126,8 +129,8 @@ docker run \
   --rm \
   --tty \
   --name docuum \
-  --volume /var/run/docker.sock:/var/run/docker.sock \
-  --volume docuum:/root \
+  --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+  --mount type=volume,source=docuum,target=/root \
   stephanmisc/docuum --threshold '10 GB'
 ```
 
@@ -139,8 +142,8 @@ docker run `
   --rm `
   --tty `
   --name docuum `
-  --volume //var/run/docker.sock:/var/run/docker.sock `
-  --volume docuum:/root `
+  --mount type=bind,src=//var/run/docker.sock,dst=/var/run/docker.sock `
+  --mount type=volume,source=docuum,target=/root `
   stephanmisc/docuum --threshold '10 GB'
 ```
 
