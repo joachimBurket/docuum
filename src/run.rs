@@ -56,7 +56,7 @@ struct SpaceRecord {
     r#type: String,
 
     #[serde(rename = "Size")]
-    size: u128,
+    size: String,
 }
 
 // Each image may be associated with multiple of these repository-tag pairs. Docker will always
@@ -377,7 +377,16 @@ fn space_usage() -> io::Result<Byte> {
                 if let Ok(space_record) = serde_json::from_str::<SpaceRecord>(line) {
                     // Return early if we found the record we're looking for.
                     if space_record.r#type == "Images" {
-                        return Ok(Byte::from_bytes(space_record.size));
+                        return Byte::from_str(&space_record.size).map_err(|_| {
+                            io::Error::new(
+                                io::ErrorKind::Other,
+                                format!(
+                                    "Unable to parse {} from {}.",
+                                    space_record.size.code_str(),
+                                    "docker system df".code_str(),
+                                ),
+                            )
+                        });
                     }
                 }
             }
