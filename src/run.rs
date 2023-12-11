@@ -408,7 +408,7 @@ fn delete_image(image: &str) -> io::Result<()> {
 
     // Tell Docker to delete the image.
     let mut child = Command::new("docker")
-        .args(&["image", "rm", "--force", image])       // TOOD: re-add the "--no-prune" argument when supported (normally in podman 4.3)
+        .args(&["image", "rm", "--force", "--no-prune", image])
         .spawn()?;
 
     // Ensure the command succeeded.
